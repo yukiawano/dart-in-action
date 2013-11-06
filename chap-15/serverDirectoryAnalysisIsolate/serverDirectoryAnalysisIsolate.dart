@@ -8,7 +8,6 @@ void main(List<String> args) {
 }
 
 analyzeFileList(fileList) {
-  print(fileList);
   Isolate.spawn(getFileTypesEntryPoint, fileList);
   Isolate.spawn(getFileSizesEntryPoint, fileList);
   
