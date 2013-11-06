@@ -9,7 +9,7 @@ void main(List<String> args) {
 
 analyzeFileList(fileList) {
   var receivePort = new ReceivePort();
-  var future = Isolate.spawn(getFileTypesEntryPoint, {"fileList":fileList, "sendPort":receivePort.sendPort});
+  Isolate.spawn(getFileTypesEntryPoint, {"fileList":fileList, "sendPort":receivePort.sendPort});
   Isolate.spawn(getFileSizesEntryPoint, {"fileList":fileList, "sendPort":receivePort.sendPort});
   
   var replyCounter = 0;
