@@ -1,49 +1,37 @@
 import "dart:io";
 import "dart:isolate";
 
-String isolateName;
-
-
 // Requires command line argument, eg: c:\windows
 // which is the folder to analyse
-void main() {
-  var options = new Options();
-  getFileList(options.arguments[0]).then((List<String> fileList) {
-    analyzeFileList(fileList);
-  });
+void main(List<String> args) {
+  analyzeFileList(getFileList(args[0]));
 }
 
 analyzeFileList(fileList) {
-  var fileTypesSendPort = spawnFunction(getFileTypesEntryPoint);
-  fileTypesSendPort.send(fileList);
-  var fileSizesSendPort = spawnFunction(getFileSizesEntryPoint);
-  fileSizesSendPort.send(fileList);
+  print(fileList);
+  Isolate.spawn(getFileTypesEntryPoint, fileList);
+  Isolate.spawn(getFileSizesEntryPoint, fileList);
   
-//  for (int i = 0; i < 1000000; i++) {}
+  for (int i = 0; i < 1000000000; i++) {}
 //  Map<String,int> typeCount = getFileTypes(fileList);
 //  print(typeCount);
 //  Map<String,int> totalSizes = getFileSizes(fileList);
 //  print(totalSizes);
 }
 
-void getFileTypesEntryPoint() {
-  var receivePort = port;
-  receivePort.receive((data, replyTo) {
-    Map<String,int> typeCount = getFileTypes(data);
-    print(typeCount);    
-  });
+void getFileTypesEntryPoint(fileList) {
+  Map<String,int> typeCount = getFileTypes(fileList);
+  print(typeCount);
 }
 
-void getFileSizesEntryPoint() {
-  var receivePort = port;
-  receivePort.receive((data, replyTo) {
-    Map<String,int> totalSizes = getFileSizes(data);
-    print(totalSizes);
-  });
+void getFileSizesEntryPoint(fileList) {
+  Map<String,int> totalSizes = getFileSizes(fileList);
+  print(totalSizes);
 }
 
 Map<String,int> getFileTypes(fileList) {
   var result = new Map<String,int>();
+  
   for (var filename in fileList) {
     var extension = getFileExtension(filename);
     if (result[extension] == null) {
@@ -53,6 +41,7 @@ Map<String,int> getFileTypes(fileList) {
       result[extension] ++;
     }
   }
+  
   return result;
 }
 
@@ -63,12 +52,11 @@ Map<String, int> getFileSizes(fileList) {
     var file = new File(filename);
     var extension = getFileExtension(filename);
     if (result[extension] == null) {
-     result[extension] = file.lengthSync(); 
+      result[extension] = file.lengthSync(); 
     }
     else {
       result[extension] += file.lengthSync();
     }
-    
   }
   
   return result;
@@ -80,21 +68,15 @@ String getFileExtension(String filename) {
   return filename.substring(extSeparator, filename.length).toUpperCase();  
 }
 
-Future<List<String>> getFileList(String folderPath) {
-  var completer = new Completer<List<String>>();
-  
+List<String> getFileList(String folderPath) {
   var directory = new Directory(folderPath);
-  directory.exists().then((bool exists) {
-    
-    var fileList = new List<String>();
-    DirectoryLister lister = directory.list();
-    
-    lister.onFile = (file) => fileList.add(file); 
-      
-    lister.onDone = (completed) {
-      completer.complete(fileList);
-    };
-  });
   
-  return completer.future;
+  if(directory.existsSync()) {
+    return directory.listSync()
+        .map((FileSystemEntity e) => e.path)
+          .where((String e) => FileSystemEntity.isFileSync(e))
+            .toList();
+  } else {
+    return null;
+  }
 }

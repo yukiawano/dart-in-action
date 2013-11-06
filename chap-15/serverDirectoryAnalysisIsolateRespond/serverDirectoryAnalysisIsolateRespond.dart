@@ -1,53 +1,40 @@
 import "dart:io";
 import "dart:isolate";
 
-String isolateName;
-
 // Requires one command line argument, eg: c:\windows
 // which is the folder to analyse
-void main() {
-  var options = new Options();
-  getFileList(options.arguments[0]).then((List<String> fileList) {
-    analyzeFileList(fileList);
-  });
-  
+void main(List<String> args) {
+  analyzeFileList(getFileList(args[0]));
 }
 
 analyzeFileList(fileList) {
-  var replyCount = 0;
-  port.receive((data, replyTo) {
-    replyCount ++;
+  var receivePort = new ReceivePort();
+  var future = Isolate.spawn(getFileTypesEntryPoint, {"fileList":fileList, "sendPort":receivePort.sendPort});
+  Isolate.spawn(getFileSizesEntryPoint, {"fileList":fileList, "sendPort":receivePort.sendPort});
+  
+  var replyCounter = 0;
+  receivePort.listen((data) {
     print(data);
     
-    if (replyCount == 2) {
-      port.close();
+    replyCounter++;
+    if(replyCounter >= 2) {
+      receivePort.close();
     }
   });
-  
-  var defaultIsolateSendPort = port.toSendPort();
-  
-  var fileTypesSendPort = spawnFunction(getFileTypesEntryPoint);
-  fileTypesSendPort.send(fileList, defaultIsolateSendPort);
-  var fileSizesSendPort = spawnFunction(getFileSizesEntryPoint);
-  fileSizesSendPort.send(fileList, defaultIsolateSendPort);
 }
 
-void getFileTypesEntryPoint() {
-  var receivePort = port;
-  receivePort.receive((data, replyTo) {
-    Map<String,int> typeCount = getFileTypes(data);
-    replyTo.send(typeCount);
-    //receivePort.close();
-  });
+void getFileTypesEntryPoint(message) {
+  SendPort sendPort = message["sendPort"];
+  List<String> fileList = message["fileList"];
+  Map<String,int> typeCount = getFileTypes(fileList);
+  sendPort.send(typeCount);
 }
 
-void getFileSizesEntryPoint() {
-  var receivePort = port;
-  receivePort.receive((data, replyTo) {
-    Map<String,int> totalSizes = getFileSizes(data);
-    replyTo.send(totalSizes);
-    //receivePort.close();
-  });
+void getFileSizesEntryPoint(message) {
+  SendPort sendPort = message["sendPort"];
+  List<String> fileList = message["fileList"];
+  Map<String,int> totalSizes = getFileSizes(fileList);
+  sendPort.send(totalSizes);
 }
 
 Map<String,int> getFileTypes(fileList) {
@@ -88,21 +75,15 @@ String getFileExtension(String filename) {
   return filename.substring(extSeparator, filename.length).toUpperCase();  
 }
 
-Future<List<String>> getFileList(String folderPath) {
-  var completer = new Completer<List<String>>();
-  
+List<String> getFileList(String folderPath) {
   var directory = new Directory(folderPath);
-  directory.exists().then((bool exists) {
-    
-    var fileList = new List<String>();
-    DirectoryLister lister = directory.list();
-    
-    lister.onFile = (file) => fileList.add(file); 
-      
-    lister.onDone = (completed) {
-      completer.complete(fileList);
-    };
-  });
   
-  return completer.future;
+  if(directory.existsSync()) {
+    return directory.listSync()
+        .map((FileSystemEntity e) => e.path)
+          .where((String e) => FileSystemEntity.isFileSync(e))
+            .toList();
+  } else {
+    return null;
+  }
 }
